@@ -4,7 +4,9 @@ JsonLogic.Net is an implementation of [JsonLogic](http://jsonlogic.com/) in .Net
 
 ## Dependencies
 
-JsonLogic.Net has a hard dependency on [Newtonsoft.Json](https://www.nuget.org/packages/Newtonsoft.Json/). It is a common library for json handling and very easy to use.
+~~JsonLogic.Net has a hard dependency on [Newtonsoft.Json](https://www.nuget.org/packages/Newtonsoft.Json/). It is a common library for json handling and very easy to use.~~
+
+This fork uses SimpleJson embedded source (MIT).
 
 ## Usage
 

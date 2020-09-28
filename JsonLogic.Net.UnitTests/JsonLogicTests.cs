@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using SimpleJson;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -205,7 +205,8 @@ namespace JsonLogic.Net.UnitTests
         {
             // Arrange
             string jsonText = "{\">\": [{\"var\": \"MyNumber\"}, 3]}";
-            var rule = JObject.Parse(jsonText);
+            var rule = SimpleJson.SimpleJson.DeserializeObject(jsonText);
+            
             object localData = new {MyNumber = 8};
             var evaluator = new JsonLogicEvaluator(EvaluateOperators.Default);
 
@@ -225,8 +226,8 @@ namespace JsonLogic.Net.UnitTests
             string ruleJson = "{`in`:[{`var`:`marital_status`},[`Single`,`Married`,`Divorced`,`Widowed`,`Separated`]]}"
                 .Replace('`', '"');
             string dataJson = "{`marital_status`: `Divorced`}".Replace('`', '"');
-            var rule = JObject.Parse(ruleJson);
-            var localData = JObject.Parse(dataJson);
+            var rule = SimpleJson.SimpleJson.DeserializeObject(ruleJson);
+            var localData = SimpleJson.SimpleJson.DeserializeObject(dataJson);
             var evaluator = new JsonLogicEvaluator(EvaluateOperators.Default);
 
             _output.WriteLine($"{MethodBase.GetCurrentMethod().Name}() Testing {rule} against {localData}");
@@ -247,8 +248,9 @@ namespace JsonLogic.Net.UnitTests
                 "{ `and` : [  {`<` : [ { `var` : `temp` }, 110 ]},  {`==` : [ { `var` : `pie.filling` }, `apple` ] }] }"
                     .Replace('`', '"');
             var evaluator = new JsonLogicEvaluator(EvaluateOperators.Default);
-            var rule = JObject.Parse(ruleJson);
-            var localData = JObject.Parse(dataJson);
+            
+            var rule = SimpleJson.SimpleJson.DeserializeObject(ruleJson);
+            var localData = SimpleJson.SimpleJson.DeserializeObject(dataJson);
 
             _output.WriteLine($"{MethodBase.GetCurrentMethod().Name}() Testing {rule} against {localData}");
 
@@ -395,7 +397,7 @@ namespace JsonLogic.Net.UnitTests
         {
             var evaluator = new JsonLogicEvaluator(EvaluateOperators.Default);
 
-            var rule = JObject.Parse(@"{""" + op + @""": [{""var"": ""missingField""}, 1000]}");
+            var rule = SimpleJson.SimpleJson.DeserializeObject(@"{""" + op + @""": [{""var"": ""missingField""}, 1000]}");
 
             var result = evaluator.Apply(rule, Data).IsTruthy();
             
@@ -425,7 +427,7 @@ namespace JsonLogic.Net.UnitTests
                 }
             ]".Replace('`', '"'));
 
-            var rules = JObject.Parse(@"{
+            var rules = SimpleJson.SimpleJson.DeserializeObject(@"{
                 `filter`: [
                     { `var`: `` },
                     {
@@ -459,17 +461,18 @@ namespace JsonLogic.Net.UnitTests
 
         }
 
-        private object GetDataObject(JToken token)
+        private object GetDataObject(object token)
         {
-            if (token is JValue) return CastPrimitive((token as JValue).Value);
-            if (token is JArray) return (token as JArray).Select(t => GetDataObject(t)).ToArray();
-            if (token is JObject)
-                return (token as JObject).Properties().Aggregate(new Dictionary<string, object>(), (d, p) =>
+            //if (token is JValue) return CastPrimitive((token as JValue).Value);
+            if (token is JsonArray) return (token as JsonArray).Select(t => GetDataObject(t)).ToArray();
+            if (token is JsonObject jsonObject)
+                return jsonObject.Aggregate(new Dictionary<string, object>(), (d, p) =>
                 {
-                    d.Add(p.Name, GetDataObject(p.Value));
+                    d.Add(p.Key, GetDataObject(p.Value));
                     return d;
                 });
-            throw new Exception("GetDataObject cannot handle token " + token.ToString());
+            return CastPrimitive(token);
+            //throw new Exception("GetDataObject cannot handle token " + token.ToString());
         }
 
         private object CastPrimitive(object value)
@@ -479,17 +482,18 @@ namespace JsonLogic.Net.UnitTests
             return value;
         }
 
-        private object GetValue(JToken token)
+        private dynamic GetValue(object token)
         {
-            if (token is JValue) return (token as JValue).Value;
-            if (token is JArray) return (token as JArray).ToArray();
-            if (token is JObject) return (token as JObject).ToObject<dynamic>();
-            throw new Exception("Cannot get value of this token: " + token.ToString(Formatting.None));
+            if (token is JsonArray jsonArray) return jsonArray;
+            if (token is JsonObject jsonObject) return jsonObject;
+            //if (token is JValue value) return value.Value;
+            //throw new Exception("Cannot get value of this token: " + token);
+            return token;
         }
 
-        public static JToken JsonFrom(string input)
+        public static object JsonFrom(string input)
         {
-            return JToken.Parse(input.Replace('`', '"'));
+            return SimpleJson.SimpleJson.DeserializeObject(input.Replace('`', '"'));
         }
 
         public static object Dynamic(Action<dynamic> ctor)

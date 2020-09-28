@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
-using Newtonsoft.Json.Linq;
+using SimpleJson;
 
 namespace JsonLogic.Net
 {
@@ -15,18 +13,19 @@ namespace JsonLogic.Net
             this.operations = operations;
         }
 
-        public object Apply(JToken rule, object data)
+        public object Apply(object rule, object data)
         {
             if (rule is null) return null;
-            if (rule is JValue) return AdjustType((rule as JValue).Value);
-            if (rule is JArray) return (rule as JArray).Select(r => Apply(r, data)).ToArray();
-
-            var ruleObj = (JObject) rule;
-            var p = ruleObj.Properties().First();
-            var opName = p.Name;
-            var opArgs = (p.Value is JArray) ? (p.Value as JArray).ToArray() : new JToken[] { p.Value };
-            var op = operations.GetOperator(opName);
-            return op(this, opArgs, data);
+            if (rule is JsonArray jsonArray) return jsonArray.Select(r => Apply(r, data)).ToArray();
+            if (rule is JsonObject jsonObject)
+            {
+                var p = jsonObject.First();
+                var opName = p.Key;
+                var opArgs = p.Value as JsonArray ?? new JsonArray(){p.Value};
+                var op = operations.GetOperator(opName);
+                return op(this, opArgs, data);
+            }
+            return AdjustType(rule);
         }
 
         private object AdjustType(object value)

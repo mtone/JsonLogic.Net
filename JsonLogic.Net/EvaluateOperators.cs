@@ -1,25 +1,24 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using Newtonsoft.Json.Linq;
+using SimpleJson;
 
 namespace JsonLogic.Net 
 {
     public class EvaluateOperators : IManageOperators
     {
-        private Dictionary<string, Func<IProcessJsonLogic, JToken[], object, object>> registry;
+        private Dictionary<string, Func<IProcessJsonLogic, JsonArray, object, object>> registry;
 
         public static EvaluateOperators Default { get; } = new EvaluateOperators();
 
         public EvaluateOperators()
         {
-            registry = new Dictionary<string, Func<IProcessJsonLogic, JToken[], object, object>>();
+            registry = new Dictionary<string, Func<IProcessJsonLogic, JsonArray, object, object>>();
             AddDefaultOperations();
         }
         
-        public void AddOperator(string name, Func<IProcessJsonLogic, JToken[], object, object> operation)
+        public void AddOperator(string name, Func<IProcessJsonLogic, JsonArray, object, object> operation)
         {
             registry[name] = operation;
         }
@@ -29,7 +28,7 @@ namespace JsonLogic.Net
             registry.Remove(name);
         }
 
-        public Func<IProcessJsonLogic, JToken[], object, object> GetOperator(string name)
+        public Func<IProcessJsonLogic, JsonArray, object, object> GetOperator(string name)
         {
             return registry[name];
         }
@@ -93,18 +92,17 @@ namespace JsonLogic.Net
                 {
                     var result = GetValueByName(data, names.ToString());
                     // This will return JValue or null if missing. Actual value of null will be wrapped in JToken with value null
-                    if (result is JValue)
-                    {
-                        // permit correct type wrangling to occur (AdjustType) without duplicating code
-                        result = p.Apply((JValue)result, null);
-                        
-                    }
-                    else if (result == null && args.Count() == 2)
-                    {
-                        object defaultValue = p.Apply(args.Last(), data);
-                        result = defaultValue;
-                    }
-
+                    // if (result is JValue)
+                    // {
+                    //     // permit correct type wrangling to occur (AdjustType) without duplicating code
+                    //     result = p.Apply((JValue)result, null);
+                    //     
+                    // }
+                    // else if (result == null && args.Count() == 2)
+                    // {
+                    //     object defaultValue = p.Apply(args.Last(), data);
+                    //     result = defaultValue;
+                    // }
                     return result;
                 }
                 catch 
@@ -116,7 +114,7 @@ namespace JsonLogic.Net
 
             AddOperator("and", (p, args, data) => {
                 object value = p.Apply(args[0], data);
-                for (var i = 1; i < args.Length && value.IsTruthy(); i++) 
+                for (var i = 1; i < args.Count && value.IsTruthy(); i++) 
                 {
                     value = p.Apply(args[i], data);
                 }
@@ -125,7 +123,7 @@ namespace JsonLogic.Net
 
             AddOperator("or", (p, args, data) => {
                 object value = p.Apply(args[0], data);
-                for (var i = 1; i < args.Length && !value.IsTruthy(); i++) 
+                for (var i = 1; i < args.Count && !value.IsTruthy(); i++) 
                 {
                     value = p.Apply(args[i], data);
                 }
@@ -139,12 +137,12 @@ namespace JsonLogic.Net
             AddOperator("not", GetOperator("!"));
 
             AddOperator("if", (p, args, data) => {
-                for (var i = 0; i < args.Length - 1; i += 2) 
+                for (var i = 0; i < args.Count - 1; i += 2) 
                 {
                     if (p.Apply(args[i], data).IsTruthy()) return p.Apply(args[i+1], data);
                 }
-                if (args.Length % 2 == 0) return null;
-                return p.Apply(args[args.Length - 1], data);
+                if (args.Count % 2 == 0) return null;
+                return p.Apply(args[args.Count - 1], data);
             });
 
             AddOperator("?:", GetOperator("if"));
@@ -168,9 +166,9 @@ namespace JsonLogic.Net
 
             AddOperator("missing_some", (p, args, data) => {
                 var minRequired = Convert.ToDouble(p.Apply(args[0], data));
-                var keys = (args[1] as JArray).ToArray();
+                var keys = args[1] as JsonArray;
                 var missingKeys = GetOperator("missing").Invoke(p, keys, data) as IEnumerable<object>;
-                var validKeyCount = keys.Length - missingKeys.Count();
+                var validKeyCount = keys.Count - missingKeys.Count();
                 return (validKeyCount >= minRequired) ? new object[0] : missingKeys;
             });
 
@@ -306,21 +304,27 @@ namespace JsonLogic.Net
         //     return d.GetType().GetTypeInfo().ImplementedInterfaces.FirstOrDefault(t => t.IsGenericType && t.GetGenericTypeDefinition() == typeof(IEnumerable<>));
         // }
 
-        private Func<IProcessJsonLogic, JToken[], object, object> DoubleArgsSatisfy(Func<double, double, bool> criteria)
+        private Func<IProcessJsonLogic, JsonArray, object, object> DoubleArgsSatisfy(Func<double, double, bool> criteria)
         {
-            return (p, args, data) => {
-                var values = args.Select(a => p.Apply(a, data))
+            object ArgsSatisfy(IProcessJsonLogic p, JsonArray args, object data)
+            {
+                var argsValues = args.Select(a => p.Apply(a, data));
+                var values = argsValues
                     .Select(a => a == null ? 0d : double.Parse(a.ToString()))
                     .ToArray();
-                
-                for (int i = 1; i < values.Length; i++) {
-                    if (!criteria(values[i-1], values[i])) return false;
+
+                for (int i = 1; i < values.Length; i++)
+                {
+                    if (!criteria(values[i - 1], values[i])) return false;
                 }
+
                 return true;
-            };
+            }
+
+            return ArgsSatisfy;
         }
 
-        private static Func<IProcessJsonLogic, JToken[], object, object> ReduceDoubleArgs(double defaultValue, Func<double, double, double> reducer)
+        private static Func<IProcessJsonLogic, JsonArray, object, object> ReduceDoubleArgs(double defaultValue, Func<double, double, double> reducer)
         {
             return (p, args, data) => Min2From(args.Select(a => p.Apply(a, data))).Select(a => a == null ? defaultValue : Convert.ToDouble(a)).Aggregate(reducer);
         }
